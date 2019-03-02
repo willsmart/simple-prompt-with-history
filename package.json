@@ -1,0 +1,25 @@
+{
+  "name": "simple-prompt-with-history",
+  "version": "1.0.0",
+  "description": "A tiny utility for text input. Stores input for later use via arrow keys like on a terminal.",
+  "main": "simple-prompt-with-history.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/willsmart/simple-prompt-with-history.git"
+  },
+  "keywords": [
+    "command",
+    "terminal",
+    "input",
+    "stdin"
+  ],
+  "author": "Will Smart",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/willsmart/simple-prompt-with-history/issues"
+  },
+  "homepage": "https://github.com/willsmart/simple-prompt-with-history#readme"
+}
