@@ -1,6 +1,6 @@
 {
   "name": "simple-prompt-with-history",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "A tiny utility for text input. Stores input for later use via arrow keys like on a terminal.",
   "main": "simple-prompt-with-history.js",
   "scripts": {

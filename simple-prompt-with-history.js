@@ -3,8 +3,10 @@ const keyListeners = {},
   fs = require('fs').promises;
 let nextTmpListener = 1;
 
-Object.assign(exports, {
+module.exports = prompt;
+Object.assign(prompt, {
   prompt,
+  loadPrompt,
   setKeyListener: (l, name = `tmpListener#${nextTmpListener++}`) => {
     keyListeners[name] = l;
     return name;
