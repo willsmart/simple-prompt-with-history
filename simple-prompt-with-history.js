@@ -1,3 +1,43 @@
+// simple-prompt-with-history node package
+// see https://github.com/willsmart/simple-prompt-with-history
+// Author: Will Smart
+// Licence: MIT
+//
+// More documentation to come but essentially at the minimal end, use like:
+/*
+
+const prompt = require('simple-prompt-with-history');
+
+prompt().then(command=>console.log(`Do this: ${command}`))
+
+*/
+// and as a more full example
+/*
+
+const {prompt, loadPrompt} = require('simple-prompt-with-history');
+
+(async function(){
+  // Set up the prompts
+  await loadPrompt({
+    name: 'default',
+    fn: 'somepath/prompt-history-filename.json',
+    eagerSave: true, // save the history file after each command
+    msg: 'Please enter a command: '
+  })
+  await loadPrompt({
+    name: 'files',
+    persist: false,
+    msg: 'Please enter a filename: '
+  })
+
+  const
+    command1 = await prompt(),
+    filename = await prompt('files'),
+    command2 = await prompt(),
+    command2 = await prompt()
+})()
+*/
+
 const keyListeners = {},
   exitListeners = {},
   fs = require('fs').promises;
@@ -108,7 +148,8 @@ async function prompt(promptInfo = 'default') {
 
   stdout.write(msg);
 
-  let drawnValue = '';
+  let drawnValue = '',
+    drawnCharIndex = 0;
 
   function getValue() {
     if (promptInfo.valueIndex < 0) promptInfo.valueIndex = 0;
@@ -116,21 +157,46 @@ async function prompt(promptInfo = 'default') {
       if (!values.length || values[values.length - 1].length) values.push('');
       promptInfo.valueIndex = values.length - 1;
     }
-    return String(values[promptInfo.valueIndex]);
+    promptInfo.value = String(values[promptInfo.valueIndex]);
+    if (typeof promptInfo.charIndex != 'number' || promptInfo.charIndex > promptInfo.value.length) {
+      promptInfo.charIndex = promptInfo.value.length;
+    }
+    if (promptInfo.charIndex < 0) promptInfo.charIndex = 0;
+    return promptInfo.value;
+  }
+
+  function moveDrawnCharIndex(to) {
+    if (to > drawnCharIndex) {
+      stdout.write('\u001b[C'.repeat(to - drawnCharIndex));
+    } else if (to < drawnCharIndex) {
+      stdout.write('\u001b[D'.repeat(drawnCharIndex - to));
+    }
+    drawnCharIndex = to;
   }
 
   function redraw() {
     const value = getValue();
-    let commonPrefixLength = 0;
-    while (
-      commonPrefixLength < drawnValue.length &&
-      commonPrefixLength < value.length &&
-      value.charAt(commonPrefixLength) == drawnValue.charAt(commonPrefixLength)
-    )
-      commonPrefixLength++;
-    stdout.write('\b \b'.repeat(drawnValue.length - commonPrefixLength) + value.substring(commonPrefixLength));
-    drawnValue = value;
+    if (value == drawnValue && promptInfo.charIndex == drawnCharIndex) return;
+
+    if (value != drawnValue) {
+      moveDrawnCharIndex(drawnValue.length);
+
+      let commonPrefixLength = 0;
+      while (
+        commonPrefixLength < drawnValue.length &&
+        commonPrefixLength < value.length &&
+        value.charAt(commonPrefixLength) == drawnValue.charAt(commonPrefixLength)
+      ) {
+        commonPrefixLength++;
+      }
+      stdout.write('\b \b'.repeat(drawnValue.length - commonPrefixLength) + value.substring(commonPrefixLength));
+      drawnValue = value;
+      drawnCharIndex = value.length;
+    }
+
+    moveDrawnCharIndex(promptInfo.charIndex);
   }
+
   redraw();
 
   return await new Promise(onEnter => {
@@ -138,20 +204,63 @@ async function prompt(promptInfo = 'default') {
       switch (key) {
         case '\t':
           if (onTab) {
-            onTab(promptInfo);
+            getValue();
+            const newValue = onTab(promptInfo);
+            if (typeof newValue == 'string') {
+              getValue();
+              values[promptInfo.valueIndex] = newValue;
+            }
+            redraw();
+            return;
+          }
+          key = ' ';
+          break;
+
+        case '\u001b[A': //up
+          if (onUp) {
+            getValue();
+            const newValue = onUp(promptInfo);
+            if (typeof newValue == 'string') {
+              getValue();
+              values[promptInfo.valueIndex] = newValue;
+            }
+          } else {
+            promptInfo.valueIndex--;
+            delete promptInfo.charIndex;
+          }
+          redraw();
+          return;
+
+        case '\u001b[B': //down
+          if (onUp) {
+            getValue();
+            const newValue = onDown(promptInfo);
+            if (typeof newValue == 'string') {
+              getValue();
+              values[promptInfo.valueIndex] = newValue;
+            }
+          } else {
+            promptInfo.valueIndex++;
+            delete promptInfo.charIndex;
+          }
+          redraw();
+          return;
+
+        case '\u001b[D': //left
+          if (promptInfo.charIndex > 0) {
+            promptInfo.charIndex--;
             redraw();
           }
-          break;
-        case '\u001b[A':
-          if (onUp) onUp(promptInfo);
-          else promptInfo.valueIndex--;
-          redraw();
-          break;
-        case '\u001b[B':
-          if (onUp) onDown(promptInfo);
-          else promptInfo.valueIndex++;
-          redraw();
-          break;
+          return;
+
+        case '\u001b[C': //right
+          const value = getValue();
+          if (promptInfo.charIndex < value.length) {
+            promptInfo.charIndex++;
+            redraw();
+          }
+          return;
+
         case '\r': {
           stdout.write('\n');
           const value = getValue();
@@ -163,29 +272,34 @@ async function prompt(promptInfo = 'default') {
           delete keyListeners.prompt;
           if (promptInfo.eagerSaving) savePrompt(promptInfo).then(() => onEnter(value));
           else onEnter(value);
-          break;
+          return;
         }
+
         case String.fromCharCode(127): {
           const value = getValue();
-          if (value.length) {
+          if (promptInfo.charIndex > 0) {
             if (promptInfo.valueIndex < values.length - 1) {
               promptInfo.valueIndex = values.length - (values[values.length - 1] == '' ? 1 : 0);
             }
-            values[promptInfo.valueIndex] = value.substring(0, value.length - 1);
+            values[promptInfo.valueIndex] =
+              value.substring(0, promptInfo.charIndex - 1) + value.substring(promptInfo.charIndex);
+            promptInfo.charIndex--;
             redraw();
           }
-          break;
+          return;
         }
-        default:
-          if (key.length != 1 || key.charCodeAt(0) < 0x20) break;
-          const value = getValue();
-          if (promptInfo.valueIndex < values.length - 1) {
-            promptInfo.valueIndex = values.length - (values[values.length - 1] == '' ? 1 : 0);
-          }
-          values[promptInfo.valueIndex] = value + key;
-          redraw();
-          break;
       }
+
+      if (key != '\t' && (key.length != 1 || key.charCodeAt(0) < 0x20)) return;
+
+      const value = getValue();
+      if (promptInfo.valueIndex < values.length - 1) {
+        promptInfo.valueIndex = values.length - (values[values.length - 1] == '' ? 1 : 0);
+      }
+      values[promptInfo.valueIndex] =
+        value.substring(0, promptInfo.charIndex) + key + value.substring(promptInfo.charIndex);
+      promptInfo.charIndex++;
+      redraw();
     };
   });
 }
