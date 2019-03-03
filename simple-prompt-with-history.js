@@ -47,7 +47,7 @@ async function loadPrompt(promptInfo = 'default') {
     const promptEntries = Object.entries(prompts),
       foundAt = promptEntries.findIndex(([_name, info]) => info === promptInfo);
     if (foundAt != -1) delete prompts[promptEntries[foundAt][0]];
-    if (prompts[promptInfo.name]) promptInf = Object.assign(prompts[promptInfo.name], promptInfo);
+    if (prompts[promptInfo.name]) promptInfo = Object.assign(prompts[promptInfo.name], promptInfo);
     else prompts[promptInfo.name] = promptInfo;
   }
 
@@ -57,11 +57,21 @@ async function loadPrompt(promptInfo = 'default') {
 
   if (!Array.isArray(promptInfo.values)) {
     delete promptInfo.valueIndex;
+    promptInfo.values = [];
 
-    if (promptInfo.persist && fs.exists(promptInfo.fn)) {
-      promptInfo.values = JSON.parse(await fs.readFile(promptInfo.fn, 'UTF8'));
-    } else {
-      promptInfo.values = [];
+    if (promptInfo.persist) {
+      do {
+        try {
+          await fs.access(promptInfo.fn);
+        } catch (err) {
+          break;
+        }
+        try {
+          promptInfo.values = JSON.parse(await fs.readFile(promptInfo.fn, 'UTF8'));
+        } catch (err) {
+          console.log(`Error while parsing history file '${promptInfo.fs}':\n${err.message}`);
+        }
+      } while (0);
     }
   }
 
@@ -69,9 +79,9 @@ async function loadPrompt(promptInfo = 'default') {
 }
 
 async function savePrompt(promptInfo = 'default') {
-  promptInfo = loadPrompt(promptInfo);
+  promptInfo = await loadPrompt(promptInfo);
   if (!promptInfo.persist) return;
-  await fs.writeFile(prompt.fn, JSON.stringify(prompt.values));
+  await fs.writeFile(promptInfo.fn, JSON.stringify(promptInfo.values));
 }
 
 async function saveAllPrompts() {
