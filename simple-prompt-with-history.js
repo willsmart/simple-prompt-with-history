@@ -143,10 +143,13 @@ async function exit() {
     });
 }
 
-async function prompt(promptInfo = 'default') {
+async function prompt(promptInfo = '') {
+  if (typeof promptInfo == 'string') promptInfo = { q: promptInfo, name: 'default' };
+  const { q } = promptInfo;
+  delete promptInfo.q;
   const { msg, values, onUp, onDown, onTab } = (promptInfo = await loadPrompt(promptInfo));
 
-  stdout.write(msg);
+  stdout.write(msg + (q || ''));
 
   let drawnValue = '',
     drawnCharIndex = 0;
